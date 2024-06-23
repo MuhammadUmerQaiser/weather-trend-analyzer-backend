@@ -34,7 +34,14 @@ exports.runSimulationOfHumidity = async (req, res) => {
       humidity,
       precip_mm: rainfall,
       feelslike_c,
+      dewpoint_c,
+      wind_kph,
+      pressure_in: pressure,
+      cloud,
+      vis_miles: visibility,
     } = response.data.current;
+
+    const wind = wind_kph / 3.6;
 
     // Monte Carlo Simulation Logic
     const results = [];
@@ -43,27 +50,53 @@ exports.runSimulationOfHumidity = async (req, res) => {
       let humiditySum = 0;
       let rainfallSum = 0;
       let feelsLikeSum = 0;
+      let dewPointSum = 0;
+      let cloudSum = 0;
+      let windSum = 0;
+      let pressureSum = 0;
+      let visibilitySum = 0;
 
       for (let j = 0; j < iterations; j++) {
         const simulatedTemp = getRandomNormal(temperature, 5);
         const simulatedHumidity = getRandomNormal(humidity, 10);
         const simulatedRainfall = getRandomNormal(rainfall, 10);
         const simulatedFeelsLike = getRandomNormal(feelslike_c, 10);
+        const simulatedDewpoint = getRandomNormal(dewpoint_c, 10);
+        const simulatedWind = getRandomNormal(wind, 10);
+        const simulatedVisibility = getRandomNormal(visibility, 10);
+        const simulatedCloud = getRandomNormal(cloud, 10);
+        const simulatedPressure = getRandomNormal(pressure, 10);
+
         tempSum += simulatedTemp;
         humiditySum += simulatedHumidity;
         rainfallSum += simulatedRainfall;
         feelsLikeSum += simulatedFeelsLike;
+        dewPointSum += simulatedDewpoint;
+        cloudSum += simulatedCloud;
+        windSum += simulatedWind;
+        pressureSum += simulatedPressure;
+        visibilitySum += simulatedVisibility;
       }
 
       const avgTemp = Math.round(tempSum / iterations);
       const avgHumidity = Math.round(humiditySum / iterations);
       const avgRainfall = Math.round(rainfallSum / iterations);
       const avgFeelsLike = Math.round(feelsLikeSum / iterations);
+      const avgdewpoint = Math.round(dewPointSum / iterations);
+      const avgCloud = Math.round(cloudSum / iterations);
+      const avgWind = Math.round(windSum / iterations);
+      const avgPressure = Math.round(pressureSum / iterations);
+      const avgVisibility = Math.round(visibilitySum / iterations);
 
       const randomAvgTemp = getRandomNormal(avgTemp, 5);
       const randomAvgHumidity = getRandomNormal(avgHumidity, 10);
       const randomAvgRainfall = getRandomNormal(avgRainfall, 10);
       const randomAvgFeelsLike = getRandomNormal(avgFeelsLike, 10);
+      const randomAvgDewpoint = getRandomNormal(avgdewpoint, 10);
+      const randomAvgCloud = getRandomNormal(avgCloud, 10);
+      const randomAvgWind = getRandomNormal(avgWind, 10);
+      const randomAvgPressure = getRandomNormal(avgPressure, 10);
+      const randomAvgVisibility = getRandomNormal(avgVisibility, 10);
 
       results.push({
         day: i + 1,
@@ -71,6 +104,11 @@ exports.runSimulationOfHumidity = async (req, res) => {
         humidity: randomAvgHumidity,
         rainfall: randomAvgRainfall,
         feels_like: randomAvgFeelsLike,
+        dew_point: randomAvgDewpoint,
+        cloud: randomAvgCloud,
+        wind: randomAvgWind,
+        pressure: randomAvgPressure,
+        visibility: randomAvgVisibility,
       });
     }
 
@@ -215,7 +253,6 @@ const readHistoricalData = () => {
     return [];
   }
 };
-
 
 // Function to calculate mean and standard deviation of rainfall for each month
 const calculateMonthlyStats = (historicalData) => {
