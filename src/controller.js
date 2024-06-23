@@ -1,4 +1,6 @@
 const axios = require("axios");
+const fs = require("fs"); // for file operations
+const path = require("path");
 
 const API_KEY = "4f5c6e3cbc5348568d0150015242206"; // Replace with your WeatherAPI key
 const BASE_URL = "http://api.weatherapi.com/v1/current.json";
@@ -13,9 +15,11 @@ const getRandomNormal = (mean, stddev) => {
     v = 0;
   while (u === 0) u = Math.random(); // Converting [0,1) to (0,1)
   while (v === 0) v = Math.random();
-  return (
-    mean + stddev * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
-  );
+  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  return mean + z * stddev;
+  // return (
+  //   mean + stddev * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
+  // );
 };
 
 exports.runSimulationOfHumidity = async (req, res) => {
@@ -29,7 +33,7 @@ exports.runSimulationOfHumidity = async (req, res) => {
       temp_c: temperature,
       humidity,
       precip_mm: rainfall,
-      feelslike_c
+      feelslike_c,
     } = response.data.current;
 
     // Monte Carlo Simulation Logic
@@ -143,8 +147,34 @@ exports.monthlyRainfallPrediction = async (req, res) => {
     const response = await getTheWeatherDataFromApi(city);
     const { precip_mm: currentRainfall } = response.data.current;
 
-    // Monte Carlo Simulation Logic
+    const historicalData = readHistoricalData();
+
+    const monthlyStats = calculateMonthlyStats(historicalData);
+
     const results = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const month = "June";
+
+      if (monthlyStats[month]) {
+        const { mean, stdDev } = monthlyStats[month];
+        const simulatedRainfall = simulateRainfall(mean, stdDev, iterations);
+        const avgRainfall =
+          simulatedRainfall.reduce((a, b) => a + b, 0) / iterations;
+
+        const randomAvgRainfall = getRandomNormal(avgRainfall, stdDev);
+
+        results.push({
+          day,
+          rainfall: randomAvgRainfall,
+        });
+      } else {
+        console.warn(
+          `No historical data found for ${month}. Skipping prediction.`
+        );
+      }
+    }
+
+    const apiResults = [];
     for (let i = 0; i < daysInMonth; i++) {
       let rainfallSum = 0;
 
@@ -157,18 +187,73 @@ exports.monthlyRainfallPrediction = async (req, res) => {
 
       const randomAvgRainfall = getRandomNormal(avgRainfall, 10);
 
-      results.push({
+      apiResults.push({
         day: i + 1,
         rainfall: randomAvgRainfall,
       });
     }
 
     res.json({
-      data: results,
+      datasetData: results,
+      data: apiResults,
       current: response.data.current,
+      history: historicalData,
     });
   } catch (error) {
     console.error("Error fetching weather data:", error);
     res.status(500).send("Error fetching weather data");
   }
+};
+
+const readHistoricalData = () => {
+  const filePath = path.join(__dirname, "rainfall_dataset.json");
+  try {
+    const data = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Error reading historical data file:", err);
+    return [];
+  }
+};
+
+
+// Function to calculate mean and standard deviation of rainfall for each month
+const calculateMonthlyStats = (historicalData) => {
+  const monthlyStats = {};
+
+  // Iterate through historical data to calculate mean and standard deviation for each month
+  historicalData.forEach((entry) => {
+    const { Year, Month, "Rainfall - (MM)": rainfall } = entry;
+    if (!monthlyStats[Month]) {
+      monthlyStats[Month] = {
+        count: 0,
+        sum: 0,
+        sumOfSquares: 0,
+      };
+    }
+    monthlyStats[Month].count++;
+    monthlyStats[Month].sum += rainfall;
+    monthlyStats[Month].sumOfSquares += rainfall * rainfall;
+  });
+
+  // Calculate mean and standard deviation for each month
+  Object.keys(monthlyStats).forEach((month) => {
+    const { count, sum, sumOfSquares } = monthlyStats[month];
+    const mean = sum / count;
+    const variance = (sumOfSquares - (sum * sum) / count) / count;
+    const stdDev = Math.sqrt(variance);
+    monthlyStats[month] = { mean, stdDev };
+  });
+
+  return monthlyStats;
+};
+
+// Function to simulate rainfall using Monte Carlo simulation
+const simulateRainfall = (mean, stdDev, iterations) => {
+  const results = [];
+  for (let i = 0; i < iterations; i++) {
+    const simulatedRainfall = getRandomNormal(mean, stdDev);
+    results.push(simulatedRainfall);
+  }
+  return results;
 };
